@@ -4,6 +4,7 @@ import { GameScene } from './GameScene'
 import { QUESTIONS } from '../questions'
 import { db } from '../firebase'
 import { ref, set } from 'firebase/database'
+import MobileControls from './MobileControls'
 
 const sanitizeKey = (str) => String(str).replace(/[.#$[\$/]/g, '_').trim() || 'anon'
 const MAX_LIVES = 7
@@ -43,6 +44,12 @@ export default function Game({ playerData, onFinish }) {
       width: 1280,
       height: 720,
       parent: containerRef.current,
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width: 1280,
+        height: 720
+      },
       physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
       scene: MyScene,
       pixelArt: false,
@@ -110,7 +117,16 @@ export default function Game({ playerData, onFinish }) {
       })
     } catch (err) { console.error('Firebase:', err) }
     return () => {
-      if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null }
+      if (gameRef.current) {
+        try {
+          if (gameRef.current.sound) {
+            gameRef.current.sound.mute = true
+            gameRef.current.sound.removeAll()
+          }
+        } catch(e) {}
+        gameRef.current.destroy(true)
+        gameRef.current = null
+      }
       if (timerRef.current) clearInterval(timerRef.current)
     }
   }, [])
@@ -123,7 +139,6 @@ export default function Game({ playerData, onFinish }) {
         if (sceneRef.current.input && sceneRef.current.input.keyboard) {
           sceneRef.current.input.keyboard.enabled = false
         }
-        // 🔧 Detener jugador al pausar (evita que siga moviéndose)
         if (sceneRef.current.player && sceneRef.current.player.body) {
           sceneRef.current.player.body.setVelocityX(0)
         }
@@ -175,15 +190,12 @@ export default function Game({ playerData, onFinish }) {
     setCurrentQuestion(null)
     setFeedback(null)
     setTimeLeft(QUESTION_TIME)
-    // ✅ REANUDAR juego + RESETEAR teclas + DETENER jugador
     if (sceneRef.current) {
       sceneRef.current.physics.resume()
       if (sceneRef.current.input && sceneRef.current.input.keyboard) {
         sceneRef.current.input.keyboard.enabled = true
-        // 🔧 Reset de TODAS las teclas (fix movimiento pegado)
         sceneRef.current.input.keyboard.resetKeys()
       }
-      // 🔧 Detener el jugador completamente
       if (sceneRef.current.player && sceneRef.current.player.body) {
         sceneRef.current.player.body.setVelocityX(0)
       }
@@ -240,51 +252,56 @@ export default function Game({ playerData, onFinish }) {
 
   return (
     <div style={{ position:'relative', width:'100vw', height:'100vh', background:'#0d1117', display:'flex', justifyContent:'center', alignItems:'center', overflow:'hidden' }}>
-      <div style={{ position:'absolute', top:10, left:10, color:'#fff', fontSize:16, background:'#16213e', padding:'8px 16px', borderRadius:8, zIndex:10, boxShadow:'0 2px 8px rgba(0,0,0,0.3)' }}>
+      <div style={{ position:'absolute', top:10, left:10, color:'#fff', fontSize:14, background:'#16213e', padding:'6px 12px', borderRadius:8, zIndex:10, boxShadow:'0 2px 8px rgba(0,0,0,0.3)', maxWidth:'60vw' }}>
         👤 <strong>{playerData.name}</strong> — ⭐ {score}
       </div>
 
-      <div style={{ position:'absolute', top:10, right:10, display:'flex', gap:8, zIndex:10 }}>
-        <div style={{ color:'#fff', fontSize:14, background:'#16213e', padding:'8px 12px', borderRadius:8, boxShadow:'0 2px 8px rgba(0,0,0,0.3)' }}>
+      <div style={{ position:'absolute', top:10, right:10, display:'flex', gap:6, zIndex:10, flexWrap:'wrap', justifyContent:'flex-end' }}>
+        <div style={{ color:'#fff', fontSize:12, background:'#16213e', padding:'6px 10px', borderRadius:8, boxShadow:'0 2px 8px rgba(0,0,0,0.3)' }}>
           {renderHearts()}
         </div>
-        <div style={{ color:'#fff', fontSize:14, background:'#16213e', padding:'8px 12px', borderRadius:8, boxShadow:'0 2px 8px rgba(0,0,0,0.3)' }}>
+        <div style={{ color:'#fff', fontSize:12, background:'#16213e', padding:'6px 10px', borderRadius:8, boxShadow:'0 2px 8px rgba(0,0,0,0.3)' }}>
           🪙 {coins}
         </div>
-        <div style={{ color:'#fff', fontSize:14, background:'#16213e', padding:'8px 12px', borderRadius:8, boxShadow:'0 2px 8px rgba(0,0,0,0.3)' }}>
+        <div style={{ color:'#fff', fontSize:12, background:'#16213e', padding:'6px 10px', borderRadius:8, boxShadow:'0 2px 8px rgba(0,0,0,0.3)' }}>
           📚 {answered.size}/{QUESTIONS.length}
         </div>
       </div>
 
-      <div ref={containerRef} style={{ width:1280, height:720, maxWidth:'100vw', maxHeight:'100vh' }} />
+      <div ref={containerRef} style={{ width:'100%', height:'100%', maxWidth:1280, maxHeight:720 }} />
+
+      {/* 🎮 CONTROLES TÁCTILES PARA MÓVIL */}
+      {!currentQuestion && !showGameOver && <MobileControls />}
 
       {currentQuestion !== null && (
-        <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.88)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:100 }}>
+        <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.88)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:100, padding:20, boxSizing:'border-box' }}>
           <div style={{
             background:'#16213e',
-            padding:30,
+            padding:'25px 20px',
             borderRadius:16,
             width:620,
             maxWidth:'92%',
             color:'#fff',
             boxShadow:'0 10px 40px rgba(233,69,96,0.3)',
             border: feedback ? (feedback.correct ? '3px solid #4CAF50' : '3px solid #F44336') : '3px solid #e94560',
-            position: 'relative'
+            position: 'relative',
+            maxHeight:'90vh',
+            overflowY:'auto'
           }}>
             {!feedback && (
               <div style={{
                 position: 'absolute',
-                top: -30,
-                right: 20,
+                top: -25,
+                right: 15,
                 background: getTimerColor(),
                 color: '#fff',
-                padding: '10px 20px',
+                padding: '8px 16px',
                 borderRadius: 50,
-                fontSize: 24,
+                fontSize: 20,
                 fontWeight: 'bold',
                 boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
                 border: '3px solid #fff',
-                minWidth: 60,
+                minWidth: 50,
                 textAlign: 'center',
                 animation: timeLeft <= 5 ? 'pulse 0.5s infinite' : 'none'
               }}>
@@ -313,7 +330,8 @@ export default function Game({ playerData, onFinish }) {
             <h2 style={{
               color: feedback ? (feedback.correct ? '#4CAF50' : '#F44336') : '#e94560',
               marginTop: 0,
-              marginBottom: 16
+              marginBottom: 12,
+              fontSize:20
             }}>
               {feedback
                 ? (feedback.timeout
@@ -321,7 +339,7 @@ export default function Game({ playerData, onFinish }) {
                     : (feedback.correct ? '✓ ¡Correcto!' : '✗ Incorrecto (-1 vida)'))
                 : `Pregunta ${currentQuestion + 1}`}
             </h2>
-            <p style={{ fontSize:18, marginBottom:20, lineHeight:1.4 }}>
+            <p style={{ fontSize:16, marginBottom:16, lineHeight:1.4 }}>
               {QUESTIONS[currentQuestion].q}
             </p>
             {QUESTIONS[currentQuestion].options.map((opt, i) => (
@@ -332,11 +350,11 @@ export default function Game({ playerData, onFinish }) {
                 style={{
                   display:'block',
                   width:'100%',
-                  padding:12,
-                  margin:'8px 0',
+                  padding:'10px 12px',
+                  margin:'6px 0',
                   borderRadius:8,
                   border:'none',
-                  fontSize:15,
+                  fontSize:14,
                   cursor: feedback ? 'default' : 'pointer',
                   textAlign:'left',
                   transition:'all 0.3s',
@@ -349,7 +367,7 @@ export default function Game({ playerData, onFinish }) {
               </button>
             ))}
             {feedback && (
-              <p style={{ textAlign:'center', marginTop:16, fontSize:14, color:'#aaa' }}>
+              <p style={{ textAlign:'center', marginTop:12, fontSize:13, color:'#aaa' }}>
                 {feedback.timeout
                   ? 'Perdiste 1 vida por no responder a tiempo ⏰'
                   : (feedback.correct ? '¡Ganaste 10 puntos! 🎉' : 'Perdiste 1 vida ❤️➖')}
@@ -360,40 +378,42 @@ export default function Game({ playerData, onFinish }) {
       )}
 
       {showGameOver && (
-        <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.92)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:200 }}>
+        <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.92)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:200, padding:20, boxSizing:'border-box' }}>
           <div style={{
             background:'linear-gradient(135deg, #8B0000, #4A0000)',
-            padding:40,
+            padding:'30px 25px',
             borderRadius:20,
             textAlign:'center',
             boxShadow:'0 20px 60px rgba(255,0,0,0.4)',
             border:'4px solid #FFD700',
-            minWidth:400
+            minWidth:280,
+            maxWidth:'92%'
           }}>
-            <h1 style={{ fontSize:64, color:'#FFD700', margin:0, textShadow:'4px 4px 0 #000', letterSpacing:3 }}>
+            <h1 style={{ fontSize:44, color:'#FFD700', margin:0, textShadow:'4px 4px 0 #000', letterSpacing:2 }}>
               💀 GAME OVER
             </h1>
-            <p style={{ fontSize:20, color:'#fff', marginTop:20 }}>
+            <p style={{ fontSize:16, color:'#fff', marginTop:15 }}>
               Te has quedado sin vidas
             </p>
             <div style={{
               display:'flex',
-              gap:20,
+              gap:12,
               justifyContent:'center',
-              marginTop:10,
-              marginBottom:20,
-              fontSize:16,
-              color:'#fff'
+              marginTop:8,
+              marginBottom:18,
+              fontSize:14,
+              color:'#fff',
+              flexWrap:'wrap'
             }}>
-              <div>⭐ Puntaje: <strong>{score}</strong></div>
-              <div>🪙 Monedas: <strong>{coins}</strong></div>
+              <div>⭐ <strong>{score}</strong></div>
+              <div>🪙 <strong>{coins}</strong></div>
               <div>📚 {answered.size}/{QUESTIONS.length}</div>
             </div>
             <button
               onClick={handleRestart}
               style={{
-                padding:'14px 32px',
-                fontSize:18,
+                padding:'12px 24px',
+                fontSize:16,
                 fontWeight:'bold',
                 borderRadius:10,
                 border:'none',
@@ -401,15 +421,16 @@ export default function Game({ playerData, onFinish }) {
                 color:'#fff',
                 cursor:'pointer',
                 boxShadow:'0 4px 15px rgba(76,175,80,0.5)',
-                marginRight:10
+                marginRight:8,
+                marginBottom:8
               }}>
               🔄 Reintentar
             </button>
             <button
               onClick={() => onFinish(score)}
               style={{
-                padding:'14px 32px',
-                fontSize:18,
+                padding:'12px 24px',
+                fontSize:16,
                 fontWeight:'bold',
                 borderRadius:10,
                 border:'none',
